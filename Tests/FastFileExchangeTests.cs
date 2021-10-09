@@ -93,17 +93,21 @@ namespace Tests
         }
 
         [TestMethod]
-        public async Task IncompletePost_CausesAbortInGet()
+        public async Task IncompletePost_PublishesPartialFile()
         {
             var handler = new FastFileExchangeHandler(FastFileExchangeHandlerOptions.Default, NullLogger.Instance);
 
             var original = RandomNumberGenerator.GetBytes(TestFileLength);
 
+            var expectedLength = 0;
+
             try
             {
                 await UploadFileAsync(handler, original, statusReport =>
                 {
-                    throw new ContractException("Throwing to abort upload and mark file as failed.");
+                    expectedLength = statusReport.UploadedBytes;
+
+                    throw new ContractException("Throwing to abort upload in the middle.");
                 });
             }
             catch (ContractException)
@@ -113,7 +117,8 @@ namespace Tests
 
             var (downloadContext, downloadedFile) = await DownloadFileAsync(handler);
 
-            Assert.IsTrue(downloadContext.IsAborted);
+            Assert.AreEqual((int)HttpStatusCode.OK, downloadContext.Response.StatusCode);
+            Assert.AreEqual(expectedLength, downloadedFile.Length);
         }
 
         [TestMethod]

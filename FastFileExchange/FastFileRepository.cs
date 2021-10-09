@@ -55,6 +55,7 @@ namespace FastFileExchange
 
             _files[filePath] = entry;
             FastFileRepositoryMetrics.CreatedFiles.Inc();
+            FastFileRepositoryMetrics.StoredFiles.Set(_files.Count);
 
             return file;
         }
@@ -65,7 +66,10 @@ namespace FastFileExchange
         public void Delete(string filePath)
         {
             if (_files.TryRemove(filePath, out _))
+            {
                 FastFileRepositoryMetrics.DeletedFiles.Inc();
+                FastFileRepositoryMetrics.StoredFiles.Set(_files.Count);
+            }
         }
 
         // We only store the most recent version of the file here.
@@ -93,6 +97,8 @@ namespace FastFileExchange
                             FastFileRepositoryMetrics.ExpiredFiles.Inc();
                     }
                 }
+
+                FastFileRepositoryMetrics.StoredFiles.Set(_files.Count);
 
                 await Task.Delay(TimeSpan.FromSeconds(10));
             }

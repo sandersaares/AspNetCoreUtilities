@@ -59,6 +59,8 @@ namespace FastFileExchange
 
                     // State changed - signal readers.
                     _stateLock.PulseAll();
+
+                    FastFileMetrics.FailedUploads.Inc();
                     return;
                 }
 
@@ -82,6 +84,8 @@ namespace FastFileExchange
 
                     // State changed - signal readers.
                     _stateLock.PulseAll();
+
+                    FastFileMetrics.CompletedUploads.Inc();
                     break;
                 }
             }
@@ -133,6 +137,7 @@ namespace FastFileExchange
                     if (flushResult.IsCompleted || flushResult.IsCanceled)
                     {
                         // The connection is closed or the copy is canceled - nothing for us to do here anymore.
+                        // More likely is a connection reset (which will surface as HttpContext.RequestAborted).
                         return;
                     }
                 }
@@ -150,10 +155,16 @@ namespace FastFileExchange
 
                         // There is no more data. Are we done?
                         if (_isFailed)
+                        {
+                            FastFileMetrics.FailedDownloads.Inc();
                             throw new IncompleteFileException();
+                        }
 
                         if (_isCompleted)
+                        {
+                            FastFileMetrics.CompletedDownloads.Inc();
                             return;
+                        }
 
                         // There is no more data but we are also not done. Take a sleep until something changes.
                         await _stateLock.WaitAsync(cancel);

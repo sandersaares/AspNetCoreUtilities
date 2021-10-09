@@ -23,7 +23,7 @@ jobs:
     - id: make_version_string
       uses: sandersaares-actions/make-version-string@master
       with:
-        assemblyInfoPath: NetStandard/AssemblyInfo.cs
+        assemblyInfoPath: SharedAssemblyInfo.cs
         primaryBranch: 'main'
     - id: make_nuget_version_string
       uses: sandersaares-actions/make-nuget-version-string@main

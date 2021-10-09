@@ -32,6 +32,7 @@ namespace FastFileExchange
             }
 
             entry.LastAccess = DateTimeOffset.UtcNow;
+            entry.IncrementAccessCount();
 
             file = entry.File;
             FastFileRepositoryMetrics.FoundFiles.Inc();
@@ -82,6 +83,10 @@ namespace FastFileExchange
         {
             public DateTimeOffset LastAccess { get; set; } = DateTimeOffset.UtcNow;
 
+            public long AccessCount => _accessCount;
+            private long _accessCount;
+            public void IncrementAccessCount() => Interlocked.Increment(ref _accessCount);
+
             public DateTimeOffset ExpiresAt => LastAccess + ExpirationThreshold;
         }
 
@@ -112,11 +117,14 @@ namespace FastFileExchange
 
             var now = DateTimeOffset.UtcNow;
 
-            foreach (var item in _files)
+            // We just want an easy to read ordered list.
+            var orderedSnapshot = _files.ToList().OrderBy(x => x.Key).ToList();
+
+            foreach (var item in orderedSnapshot)
             {
                 var timeToExpiration = item.Value.ExpiresAt - now;
 
-                await streamWriter.WriteLineAsync(FormattableString.Invariant($"'{item.Key}' [{item.Value.File.ContentType}] with a length of {item.Value.File.Length:N0} byes expires in {timeToExpiration.TotalSeconds:F2} seconds."));
+                await streamWriter.WriteLineAsync(FormattableString.Invariant($"'{item.Key}' [{item.Value.File.ContentType}]; length {item.Value.File.Length:N0}; accessed {item.Value.AccessCount:N0} times; expires in {timeToExpiration.TotalSeconds:F2} seconds."));
             }
 
             await streamWriter.WriteLineAsync(FormattableString.Invariant($"Total {_files.Count:N0} stored files."));

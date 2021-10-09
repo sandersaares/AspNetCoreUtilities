@@ -1,22 +1,27 @@
 <?xml version="1.0"?>
 <package xmlns="http://schemas.microsoft.com/packaging/2010/07/nuspec.xsd">
-	<metadata minClientVersion="4.0">
-		<id>FastFileExchange</id>
+    <metadata minClientVersion="4.0">
+        <id>FastFileExchange</id>
 
-		<!-- Automatically set by release process. -->
-		<version>__VERSIONSTRING__</version>
+        <!-- Automatically set by release process. -->
+        <version>__VERSIONSTRING__</version>
 
-		<authors>sandersaares</authors>
-		<description>ASP.NET Core module for fast file exchange using chunked transfer encoding in HTTP/1.1 and native chunking with higher protocols.</description>
-		<projectUrl>https://github.com/sandersaares/AspNetCoreUtilities</projectUrl>
-		<license type="expression">MIT</license>
-		<dependencies>
-			<!-- Sync this with whatever is in .csproj -->
-			<dependency id="prometheus-net" version="5.0.1" />
-			<dependency id="Koek" version="2.0.0" />
-		</dependencies>
-	</metadata>
-	<files>
-		<file src="FastFileExchange/bin/Release/net6.0/FastFileExchange.*" target="lib/net6.0" />
-	</files>
+        <authors>sandersaares</authors>
+        <description>ASP.NET Core module for fast file exchange using chunked transfer encoding in HTTP/1.1 and native chunking with higher protocols.</description>
+        <projectUrl>https://github.com/sandersaares/AspNetCoreUtilities</projectUrl>
+        <license type="expression">MIT</license>
+        <dependencies>
+            <!-- Sync this with whatever is in .csproj -->
+            <dependency id="prometheus-net" version="5.0.1" />
+            <dependency id="Koek" version="2.0.0" />
+        </dependencies>
+        <frameworkReferences>
+            <group targetFramework="net6.0">
+                <frameworkReference name="Microsoft.AspNetCore.App" />
+            </group>
+        </frameworkReferences>
+    </metadata>
+    <files>
+        <file src="FastFileExchange/bin/Release/net6.0/FastFileExchange.*" target="lib/net6.0" />
+    </files>
 </package>

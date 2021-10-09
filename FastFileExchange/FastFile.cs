@@ -53,42 +53,47 @@ namespace FastFileExchange
                 using var contentLockHolder = await _contentLock.WriterLockAsync();
                 using var stateLockHolder = await _stateLock.EnterAsync();
 
-                // If we are cancelled, we cannot strictly speaking say we have completed - it is a failed upload.
-                // Therefore, set a signal to let any downloaders know the file has failed before being completed.
-                if (readResult.IsCanceled)
+                try
                 {
-                    _isFailed = true;
+                    // If we are cancelled, we cannot strictly speaking say we have completed - it is a failed upload.
+                    // Therefore, set a signal to let any downloaders know the file has failed before being completed.
+                    if (readResult.IsCanceled)
+                    {
+                        _isFailed = true;
 
-                    // State changed - signal readers.
-                    _stateLock.PulseAll();
+                        // State changed - signal readers.
+                        _stateLock.PulseAll();
 
-                    FastFileMetrics.FailedUploads.Inc();
-                    return;
+                        FastFileMetrics.FailedUploads.Inc();
+                        return;
+                    }
+
+                    if (!readResult.Buffer.IsEmpty)
+                    {
+                        _content.Position = _content.Length;
+
+                        foreach (var segment in readResult.Buffer)
+                            _content.Write(segment.Span);
+
+                        // More data is available - signal readers.
+                        _stateLock.PulseAll();
+                    }
+
+                    // We need to set this after copying the last buffer, because IsCompleted can be set together with the last buffer.
+                    if (readResult.IsCompleted)
+                    {
+                        _isCompleted = true;
+
+                        // State changed - signal readers.
+                        _stateLock.PulseAll();
+
+                        FastFileMetrics.CompletedUploads.Inc();
+                        break;
+                    }
                 }
-
-                if (!readResult.Buffer.IsEmpty)
+                finally
                 {
-                    _content.Position = _content.Length;
-
-                    foreach (var segment in readResult.Buffer)
-                        _content.Write(segment.Span);
-
                     reader.AdvanceTo(readResult.Buffer.End);
-
-                    // More data is available - signal readers.
-                    _stateLock.PulseAll();
-                }
-
-                // We need to set this after copying the last buffer, because IsCompleted can be set together with the last buffer.
-                if (readResult.IsCompleted)
-                {
-                    _isCompleted = true;
-
-                    // State changed - signal readers.
-                    _stateLock.PulseAll();
-
-                    FastFileMetrics.CompletedUploads.Inc();
-                    break;
                 }
             }
         }

@@ -11,6 +11,7 @@ namespace FastFileExchange
             var exchange = new FastFileExchangeHandler(options);
 
             app.Map("/files", x => x.Run(exchange.HandleFileRequestAsync));
+            app.Map("/diagnostics", x => x.Run(exchange.HandleDiagnosticsRequestAsync));
         }
     }
 }

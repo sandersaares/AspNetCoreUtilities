@@ -82,7 +82,7 @@ namespace FastFileExchange
             var maxRequestBodySizeFeature = context.Features.Get<IHttpMaxRequestBodySizeFeature>();
             
             if (maxRequestBodySizeFeature != null)
-                maxRequestBodySizeFeature.MaxRequestBodySize = 16 * 1024 * 1024 * 64; // TODO: Fixme
+                maxRequestBodySizeFeature.MaxRequestBodySize = 16 * 1024 * 1024;
 
             var file = _repository.Create(filePath, context.Request.Headers.ContentType.SingleOrDefault("application/octet-stream"));
 
@@ -98,6 +98,20 @@ namespace FastFileExchange
 
             context.Response.StatusCode = (int)HttpStatusCode.NoContent;
             await context.Response.BodyWriter.CompleteAsync();
+        }
+
+        public async Task HandleDiagnosticsRequestAsync(HttpContext context)
+        {
+            if (context.Request.Method != "GET")
+            {
+                context.Response.StatusCode = (int)HttpStatusCode.MethodNotAllowed;
+                return;
+            }
+
+            context.Response.StatusCode = (int)HttpStatusCode.OK;
+            context.Response.ContentType = "text/plain";
+
+            await _repository.WriteDiagnosticDumpAsync(context.Response.BodyWriter, context.RequestAborted);
         }
     }
 }

@@ -1,5 +1,7 @@
 ﻿using System.Collections.Concurrent;
 using System.Diagnostics.CodeAnalysis;
+using System.IO.Pipelines;
+using System.Text;
 
 namespace FastFileExchange
 {
@@ -102,6 +104,22 @@ namespace FastFileExchange
 
                 await Task.Delay(TimeSpan.FromSeconds(10));
             }
+        }
+
+        public async Task WriteDiagnosticDumpAsync(PipeWriter writer, CancellationToken cancel)
+        {
+            using var streamWriter = new StreamWriter(writer.AsStream(), Encoding.UTF8);
+
+            var now = DateTimeOffset.UtcNow;
+
+            foreach (var item in _files)
+            {
+                var timeToExpiration = item.Value.ExpiresAt - now;
+
+                await streamWriter.WriteLineAsync(FormattableString.Invariant($"'{item.Key}' [{item.Value.File.ContentType}] with a length of {item.Value.File.Length:N0} byes expires in {timeToExpiration.TotalSeconds:F2} seconds."));
+            }
+
+            await streamWriter.WriteLineAsync(FormattableString.Invariant($"Total {_files.Count:N0} stored files."));
         }
     }
 }

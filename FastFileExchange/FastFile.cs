@@ -17,6 +17,8 @@ namespace FastFileExchange
         public string FilePath { get; }
         public string ContentType { get; }
 
+        public long Length => _content.Length;
+
         // We use a two-scope synchronization strategy.
         // 1) Reader/Writer lock protects access to the contents themselves, ensuring isolation between reads and writes.
         // 2) State lock protects the completion/length control variables, and is pulsed when anything changes.

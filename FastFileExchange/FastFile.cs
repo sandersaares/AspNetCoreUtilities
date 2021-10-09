@@ -39,10 +39,12 @@ namespace FastFileExchange
         // True if the file has been completely loaded and no more bytes are incoming.
         private bool _isCompleted;
 
-        public async Task CopyFromAsync(PipeReader reader, CancellationToken cancel)
+        /// <remarks>
+        /// Does not support cancellation because we always want to finish reading the request body.
+        /// If upstream wants to cancel, just abort the connection, causing the body reader to complete.
+        /// </remarks>
+        public async Task CopyFromAsync(PipeReader reader)
         {
-            using var cancelRegistration = cancel.Register(() => reader.CancelPendingRead());
-
             while (true)
             {
                 var readResult = await reader.ReadAsync(CancellationToken.None);
@@ -64,8 +66,7 @@ namespace FastFileExchange
                     }
 
                     // We need to set this after copying the last buffer, because IsCompleted can be set together with the last buffer.
-                    // We treat cancellation and completion the same, since some client apps (e.g. FFmpeg) seem to haphazardly use both ways for request completion.
-                    if (readResult.IsCompleted || readResult.IsCanceled)
+                    if (readResult.IsCompleted)
                     {
                         _isCompleted = true;
 

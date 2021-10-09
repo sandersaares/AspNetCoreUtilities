@@ -107,7 +107,7 @@ namespace FastFileExchange
 
             try
             {
-                await file.CopyFromAsync(context.Request.BodyReader, context.RequestAborted);
+                await file.CopyFromAsync(context.Request.BodyReader);
 
                 context.Response.StatusCode = (int)HttpStatusCode.Created;
                 _logger.LogInformation("Upload completed for {filePath}, length {length} bytes.", filePath, file.Length);

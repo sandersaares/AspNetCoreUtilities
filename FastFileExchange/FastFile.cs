@@ -95,6 +95,8 @@ namespace FastFileExchange
             // We need to copy the data into a buffer, then release any locks, then do the actual write to network.
             long position = 0;
 
+            bool firstIteration = true;
+
             while (!cancel.IsCancellationRequested)
             {
                 // Grab a suitable output buffer.
@@ -109,6 +111,16 @@ namespace FastFileExchange
                 // Fill it with some data. We need only the content lock for read operations.
                 using (await _contentLock.ReaderLockAsync(cancel))
                 {
+                    if (firstIteration)
+                    {
+                        firstIteration = false;
+
+                        if (_isCompleted)
+                            FastFileMetrics.CompleteFilesAtDownloadStart.Inc();
+                        else
+                            FastFileMetrics.IncompleteFilesAtDownloadStart.Inc();
+                    }
+
                     if (_content.Length > position)
                     {
                         // There is new data! Copy it to the buffer.

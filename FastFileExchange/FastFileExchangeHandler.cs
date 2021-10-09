@@ -18,7 +18,7 @@ namespace FastFileExchange
 
         private static readonly string[] SupportedMethods = new[] { "GET", "POST", "DELETE" };
 
-        public async Task HandleFileRequest(HttpContext context)
+        public async Task HandleFileRequestAsync(HttpContext context)
         {
             if (!SupportedMethods.Contains(context.Request.Method))
             {
@@ -54,9 +54,11 @@ namespace FastFileExchange
             {
                 // TODO: Do we need optimistic retries here, to wait N milliseconds for the file to become available, to overcome jitter? It can help, sometimes.
                 context.Response.StatusCode = (int)HttpStatusCode.NotFound;
+                await context.Response.BodyWriter.CompleteAsync();
                 return;
             }
 
+            context.Response.StatusCode = (int)HttpStatusCode.OK;
             context.Response.Headers.ContentType = file.ContentType;
             context.Response.Headers.ContentLength = null;
 
@@ -68,6 +70,10 @@ namespace FastFileExchange
             {
                 // Not much we can do here. Abort it un-gracefully to attempt to signal a problem.
                 context.Abort();
+            }
+            finally
+            {
+                await context.Response.BodyWriter.CompleteAsync();
             }
         }
 
@@ -81,13 +87,17 @@ namespace FastFileExchange
             var file = _repository.Create(filePath, context.Request.Headers.ContentType.SingleOrDefault("application/octet-stream"));
 
             await file.CopyFromAsync(context.Request.BodyReader, context.RequestAborted);
+
+            context.Response.StatusCode = (int)HttpStatusCode.Created;
+            await context.Response.BodyWriter.CompleteAsync();
         }
 
-        private Task HandleDelete(string filePath, HttpContext context)
+        private async Task HandleDelete(string filePath, HttpContext context)
         {
             _repository.Delete(filePath);
 
-            return Task.CompletedTask;
+            context.Response.StatusCode = (int)HttpStatusCode.NoContent;
+            await context.Response.BodyWriter.CompleteAsync();
         }
     }
 }

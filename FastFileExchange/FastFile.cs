@@ -85,8 +85,6 @@ namespace FastFileExchange
                     break;
                 }
             }
-
-            await reader.CompleteAsync();
         }
 
         // Sort of arbitrary. We need to balance buffer splitting overhead (if too small, we need many iterations) VS memory overhead (leaving most of it empty).
@@ -155,10 +153,7 @@ namespace FastFileExchange
                             throw new IncompleteFileException();
 
                         if (_isCompleted)
-                        {
-                            await writer.CompleteAsync();
                             return;
-                        }
 
                         // There is no more data but we are also not done. Take a sleep until something changes.
                         await _stateLock.WaitAsync(cancel);

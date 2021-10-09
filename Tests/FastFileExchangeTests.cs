@@ -218,9 +218,8 @@ namespace Tests
                     }
                     catch (ContractException)
                     {
-                        // We will pretend that the client aborted the request here due to error.
-                        context.RequestAbortedCts.Cancel();
-                        throw;
+                        // Just break out early, that's all we do.
+                        break;
                     }
                 }
 

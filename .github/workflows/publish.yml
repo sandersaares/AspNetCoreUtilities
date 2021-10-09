@@ -38,7 +38,7 @@ jobs:
       env:
         VERSIONSTRING: ${{ steps.make_nuget_version_string.outputs.nugetVersionstring }}
       with:
-        path: *.nuspec
+        path: '*.nuspec'
     - name: Build
       run: dotnet build --configuration Release --no-restore
     - name: Test

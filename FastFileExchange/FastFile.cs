@@ -39,9 +39,6 @@ namespace FastFileExchange
         // True if the file has been completely loaded and no more bytes are incoming.
         private bool _isCompleted;
 
-        // True if the file will never become completely loaded because something went wrong with the upload to the file exchange.
-        private bool _isFailed;
-
         public async Task CopyFromAsync(PipeReader reader, CancellationToken cancel)
         {
             using var cancelRegistration = cancel.Register(() => reader.CancelPendingRead());
@@ -55,19 +52,6 @@ namespace FastFileExchange
 
                 try
                 {
-                    // If we are cancelled, we cannot strictly speaking say we have completed - it is a failed upload.
-                    // Therefore, set a signal to let any downloaders know the file has failed before being completed.
-                    if (readResult.IsCanceled)
-                    {
-                        _isFailed = true;
-
-                        // State changed - signal readers.
-                        _stateLock.PulseAll();
-
-                        FastFileMetrics.FailedUploads.Inc();
-                        return;
-                    }
-
                     if (!readResult.Buffer.IsEmpty)
                     {
                         _content.Position = _content.Length;
@@ -80,7 +64,8 @@ namespace FastFileExchange
                     }
 
                     // We need to set this after copying the last buffer, because IsCompleted can be set together with the last buffer.
-                    if (readResult.IsCompleted)
+                    // We treat cancellation and completion the same, since some client apps (e.g. FFmpeg) seem to haphazardly use both ways for request completion.
+                    if (readResult.IsCompleted || readResult.IsCanceled)
                     {
                         _isCompleted = true;
 
@@ -159,13 +144,6 @@ namespace FastFileExchange
                     {
                         if (_content.Length > position)
                             break; // There is more data, go ahead and read it.
-
-                        // There is no more data. Are we done?
-                        if (_isFailed)
-                        {
-                            FastFileMetrics.FailedDownloads.Inc();
-                            throw new IncompleteFileException();
-                        }
 
                         if (_isCompleted)
                         {

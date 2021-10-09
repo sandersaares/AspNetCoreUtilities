@@ -1,4 +1,6 @@
 ﻿using Microsoft.AspNetCore.Builder;
+using Microsoft.Extensions.DependencyInjection;
+using Microsoft.Extensions.Logging;
 
 namespace FastFileExchange
 {
@@ -8,7 +10,9 @@ namespace FastFileExchange
         {
             options ??= FastFileExchangeHandlerOptions.Default;
 
-            var exchange = new FastFileExchangeHandler(options);
+            var logger = app.ApplicationServices.GetService<ILoggerFactory>()!.CreateLogger<FastFileExchangeHandler>();
+
+            var exchange = new FastFileExchangeHandler(options, logger);
 
             app.Map("/files", x => x.Run(exchange.HandleFileRequestAsync));
             app.Map("/diagnostics", x => x.Run(exchange.HandleDiagnosticsRequestAsync));

@@ -1,20 +1,23 @@
 ﻿using Koek;
 using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Http.Features;
+using Microsoft.Extensions.Logging;
 using System.Net;
 
 namespace FastFileExchange
 {
     internal class FastFileExchangeHandler
     {
-        public FastFileExchangeHandler(FastFileExchangeHandlerOptions options)
+        public FastFileExchangeHandler(FastFileExchangeHandlerOptions options, ILogger logger)
         {
             _options = options;
+            _logger = logger;
 
             _repository = new FastFileRepository(options);
         }
 
         private readonly FastFileExchangeHandlerOptions _options;
+        private readonly ILogger _logger;
 
         private static readonly string[] SupportedMethods = new[] { "GET", "POST", "DELETE" };
 
@@ -52,11 +55,15 @@ namespace FastFileExchange
 
             if (!_repository.TryGet(filePath, out var file))
             {
+                _logger.LogDebug("Not found: {filePath}", filePath);
+
                 // TODO: Do we need optimistic retries here, to wait N milliseconds for the file to become available, to overcome jitter? It can help, sometimes.
                 context.Response.StatusCode = (int)HttpStatusCode.NotFound;
                 await context.Response.BodyWriter.CompleteAsync();
                 return;
             }
+
+            _logger.LogDebug("Found: {filePath}", filePath);
 
             context.Response.StatusCode = (int)HttpStatusCode.OK;
             context.Response.Headers.ContentType = file.ContentType;
@@ -65,11 +72,23 @@ namespace FastFileExchange
             try
             {
                 await file.CopyToAsync(context.Response.BodyWriter, context.RequestAborted);
+
+                _logger.LogDebug("Provided complete file: {filePath}", filePath);
             }
-            catch (IncompleteFileException)
+            catch (Exception ex)
             {
-                // Not much we can do here. Abort it un-gracefully to attempt to signal a problem.
-                context.Abort();
+                _logger.LogError("Failed to retrieve file {filePath} with error {error}", filePath, Helpers.Debug.GetAllExceptionMessages(ex));
+
+                if (context.Response.HasStarted)
+                {
+                    // Not much we can do here. Abort it un-gracefully to attempt to signal a problem.
+                    context.Abort();
+                }
+                else
+                {
+                    // Not sure what happened but it is probably our fault - client can't mess up downloads very much.
+                    context.Response.StatusCode = (int)HttpStatusCode.InternalServerError;
+                }
             }
             finally
             {
@@ -86,18 +105,53 @@ namespace FastFileExchange
 
             var file = _repository.Create(filePath, context.Request.Headers.ContentType.SingleOrDefault("application/octet-stream"));
 
-            await file.CopyFromAsync(context.Request.BodyReader, context.RequestAborted);
+            try
+            {
+                await file.CopyFromAsync(context.Request.BodyReader, context.RequestAborted);
 
-            context.Response.StatusCode = (int)HttpStatusCode.Created;
-            await context.Response.BodyWriter.CompleteAsync();
+                context.Response.StatusCode = (int)HttpStatusCode.Created;
+                _logger.LogInformation("Upload completed for {filePath}.", filePath);
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, "Upload failed for {filePath} with error {error}", filePath, Helpers.Debug.GetAllExceptionMessages(ex));
+
+                if (context.Response.HasStarted)
+                    return; // Nothing we can do anymore.
+
+                // Assume it is client error - with uploads, this is most likely.
+                context.Response.StatusCode = (int)HttpStatusCode.BadRequest;
+            }
+            finally
+            {
+                await context.Response.BodyWriter.CompleteAsync();
+            }
         }
 
         private async Task HandleDelete(string filePath, HttpContext context)
         {
-            _repository.Delete(filePath);
+            try
+            {
+                _repository.Delete(filePath);
 
-            context.Response.StatusCode = (int)HttpStatusCode.NoContent;
-            await context.Response.BodyWriter.CompleteAsync();
+                context.Response.StatusCode = (int)HttpStatusCode.NoContent;
+
+                _logger.LogInformation("Deleted {filePath}.", filePath);
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, "Delete failed for {filePath} with error {error}", filePath, Helpers.Debug.GetAllExceptionMessages(ex));
+
+                if (context.Response.HasStarted)
+                    return; // Nothing we can do anymore.
+
+                // Not sure what happened but it is probably our fault - client can't mess up deletes very much.
+                context.Response.StatusCode = (int)HttpStatusCode.InternalServerError;
+            }
+            finally
+            {
+                await context.Response.BodyWriter.CompleteAsync();
+            }
         }
 
         public async Task HandleDiagnosticsRequestAsync(HttpContext context)

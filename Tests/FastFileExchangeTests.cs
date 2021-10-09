@@ -2,6 +2,7 @@
 using Koek;
 using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Http.Features;
+using Microsoft.Extensions.Logging.Abstractions;
 using Microsoft.VisualStudio.TestTools.UnitTesting;
 using Nito.AsyncEx;
 using System;
@@ -22,7 +23,7 @@ namespace Tests
         [TestMethod]
         public async Task PostThenGet_ReturnsExpectedContent()
         {
-            var handler = new FastFileExchangeHandler(FastFileExchangeHandlerOptions.Default);
+            var handler = new FastFileExchangeHandler(FastFileExchangeHandlerOptions.Default, NullLogger.Instance);
 
             var original = RandomNumberGenerator.GetBytes(TestFileLength);
 
@@ -41,7 +42,7 @@ namespace Tests
             // When we are ready with read status, we signal this to verify status.
             var readCompleted = new AsyncAutoResetEvent(false);
 
-            var handler = new FastFileExchangeHandler(FastFileExchangeHandlerOptions.Default);
+            var handler = new FastFileExchangeHandler(FastFileExchangeHandlerOptions.Default, NullLogger.Instance);
 
             var original = RandomNumberGenerator.GetBytes(TestFileLength);
 
@@ -94,7 +95,7 @@ namespace Tests
         [TestMethod]
         public async Task IncompletePost_CausesAbortInGet()
         {
-            var handler = new FastFileExchangeHandler(FastFileExchangeHandlerOptions.Default);
+            var handler = new FastFileExchangeHandler(FastFileExchangeHandlerOptions.Default, NullLogger.Instance);
 
             var original = RandomNumberGenerator.GetBytes(TestFileLength);
 
@@ -118,7 +119,7 @@ namespace Tests
         [TestMethod]
         public async Task GetNonexistingfile_ReturnsNotFound()
         {
-            var handler = new FastFileExchangeHandler(FastFileExchangeHandlerOptions.Default);
+            var handler = new FastFileExchangeHandler(FastFileExchangeHandlerOptions.Default, NullLogger.Instance);
             var (downloadContext, downloadedFile) = await DownloadFileAsync(handler);
 
             Assert.AreEqual((int)HttpStatusCode.NotFound, downloadContext.Response.StatusCode);
@@ -127,7 +128,7 @@ namespace Tests
         [TestMethod]
         public async Task DeleteNonexistingfile_Succeeds()
         {
-            var handler = new FastFileExchangeHandler(FastFileExchangeHandlerOptions.Default);
+            var handler = new FastFileExchangeHandler(FastFileExchangeHandlerOptions.Default, NullLogger.Instance);
             var deleteContext = await DeleteFileAsync(handler);
 
             Assert.AreEqual((int)HttpStatusCode.NoContent, deleteContext.Response.StatusCode);
@@ -136,7 +137,7 @@ namespace Tests
         [TestMethod]
         public async Task Delete_ActuallyDeletes()
         {
-            var handler = new FastFileExchangeHandler(FastFileExchangeHandlerOptions.Default);
+            var handler = new FastFileExchangeHandler(FastFileExchangeHandlerOptions.Default, NullLogger.Instance);
 
             var original = RandomNumberGenerator.GetBytes(TestFileLength);
 
@@ -156,7 +157,7 @@ namespace Tests
         [TestMethod]
         public async Task PostTwice_Overwrites()
         {
-            var handler = new FastFileExchangeHandler(FastFileExchangeHandlerOptions.Default);
+            var handler = new FastFileExchangeHandler(FastFileExchangeHandlerOptions.Default, NullLogger.Instance);
 
             var original1 = RandomNumberGenerator.GetBytes(TestFileLength);
             var original2 = RandomNumberGenerator.GetBytes(TestFileLength);

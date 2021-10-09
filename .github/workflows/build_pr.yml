@@ -1,0 +1,47 @@
+name: Build
+
+on:
+  pull_request:
+    branches: [ main ]
+
+jobs:
+  build:
+
+    runs-on: ubuntu-latest
+
+    steps:
+    - uses: actions/checkout@v2
+      with:
+        lfs: true
+    - name: Setup .NET Core
+      uses: actions/setup-dotnet@v1
+      with:
+        dotnet-version: 6.0.x
+        include-prerelease: true
+    - name: Install dependencies
+      run: dotnet restore
+    - id: make_version_string
+      uses: sandersaares-actions/make-version-string@master
+      with:
+        assemblyInfoPath: NetStandard/AssemblyInfo.cs
+        primaryBranch: 'main'
+    - id: make_nuget_version_string
+      uses: sandersaares-actions/make-nuget-version-string@main
+      with:
+        versionstring: ${{ steps.make_version_string.outputs.versionstring }}
+        releaseType: cb
+    - uses: sandersaares-actions/expand-tokens@master
+      env:
+        VERSIONSTRING: ${{ steps.make_nuget_version_string.outputs.nugetVersionstring }}
+      with:
+        path: *.nuspec
+    - name: Build
+      run: dotnet build --configuration Release --no-restore
+    - name: Test
+      run: dotnet test --configuration Release --no-restore --verbosity normal
+    - name: Package
+      run: nuget pack *.nuspec
+    - uses: actions/upload-artifact@v2
+      with:
+        name: nupkg
+        path: '*.nupkg'

@@ -7,10 +7,19 @@
 		<DebugType>full</DebugType>
 		<ErrorReport>send</ErrorReport>
 		<PackageLicenseExpression>MIT</PackageLicenseExpression>
+		<GenerateAssemblyInfo>false</GenerateAssemblyInfo>
 	</PropertyGroup>
 
 	<ItemGroup>
+	  <Compile Include="..\SharedAssemblyInfo.cs" Link="SharedAssemblyInfo.cs" />
+	</ItemGroup>
+
+	<ItemGroup>
 		<FrameworkReference Include="Microsoft.AspNetCore.App" />
+	</ItemGroup>
+
+	<ItemGroup>
+	  <None Include="..\FastFileExchange.nuspec" Link="FastFileExchange.nuspec" />
 	</ItemGroup>
 
 	<ItemGroup>

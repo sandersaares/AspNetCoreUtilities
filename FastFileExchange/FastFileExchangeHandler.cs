@@ -63,7 +63,7 @@ namespace FastFileExchange
                 return;
             }
 
-            _logger.LogDebug("Found: {filePath}", filePath);
+            _logger.LogDebug("Found: {filePath}, current length {length}", filePath, file.Length);
 
             context.Response.StatusCode = (int)HttpStatusCode.OK;
             context.Response.Headers.ContentType = file.ContentType;
@@ -73,7 +73,7 @@ namespace FastFileExchange
             {
                 await file.CopyToAsync(context.Response.BodyWriter, context.RequestAborted);
 
-                _logger.LogDebug("Provided complete file: {filePath}", filePath);
+                _logger.LogDebug("Provided complete file {filePath}, length {length} bytes.", filePath, file.Length);
             }
             catch (Exception ex)
             {
@@ -110,7 +110,7 @@ namespace FastFileExchange
                 await file.CopyFromAsync(context.Request.BodyReader, context.RequestAborted);
 
                 context.Response.StatusCode = (int)HttpStatusCode.Created;
-                _logger.LogInformation("Upload completed for {filePath}.", filePath);
+                _logger.LogInformation("Upload completed for {filePath}, length {length} bytes.", filePath, file.Length);
             }
             catch (Exception ex)
             {
@@ -136,7 +136,7 @@ namespace FastFileExchange
 
                 context.Response.StatusCode = (int)HttpStatusCode.NoContent;
 
-                _logger.LogInformation("Deleted {filePath}.", filePath);
+                _logger.LogInformation("Deleted {filePath}", filePath);
             }
             catch (Exception ex)
             {

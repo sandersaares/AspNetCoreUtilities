@@ -1,9 +1,4 @@
-﻿using System;
-using System.Collections.Generic;
-using System.Linq;
-using System.Text;
-using System.Text.RegularExpressions;
-using System.Threading.Tasks;
+﻿using System.Text.RegularExpressions;
 
 namespace FastFileExchange
 {
@@ -14,12 +9,12 @@ namespace FastFileExchange
         /// <summary>
         /// Files expire this long after the most recent access.
         /// </summary>
-        public TimeSpan DefaultExpirationThreshold = TimeSpan.FromSeconds(60);
+        public TimeSpan DefaultExpirationThreshold { get; set; } = TimeSpan.FromSeconds(60);
 
         /// <summary>
         /// Files matching the patterns expire this long after the most recent access.
         /// Allows specific files to be preserved for longer/shorter than the default value.
         /// </summary>
-        public Dictionary<Regex, TimeSpan> PatternSpecificExpirationThresholds = new();
+        public Dictionary<Regex, TimeSpan> PatternSpecificExpirationThresholds { get; set; } = new();
     }
 }

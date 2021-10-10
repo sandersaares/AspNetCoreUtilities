@@ -21,6 +21,7 @@ namespace FastFileExchange
 
         // We use a two-scope synchronization strategy.
         // 1) Reader/Writer lock protects access to the contents themselves, ensuring isolation between reads and writes.
+        //    Reader lock is enough to also read state (because reader lock implies no writes are happening).
         // 2) State lock protects the completion/length control variables, and is pulsed when anything changes.
         //    State writes assume that contents write lock is also held.
         //    State reads do not require any other locks to be held (they just release new readers to make new read attempts).
@@ -39,26 +40,44 @@ namespace FastFileExchange
         // True if the file has been completely loaded and no more bytes are incoming.
         private bool _isCompleted;
 
-        /// <remarks>
-        /// Does not support cancellation because we always want to finish reading the request body.
-        /// If upstream wants to cancel, just abort the connection, causing the body reader to complete.
-        /// </remarks>
-        public async Task CopyFromAsync(PipeReader reader)
+        // True if the file will never become completely loaded because something went wrong with the upload to the file exchange (broken connection).
+        private bool _isFailed;
+
+        public async Task CopyFromAsync(PipeReader reader, CancellationToken cancel)
         {
             while (true)
             {
-                var readResult = await reader.ReadAsync(CancellationToken.None);
+                ReadResult result;
+
+                try
+                {
+                    result = await reader.ReadAsync(cancel);
+                }
+                catch
+                {
+                    // We got cancelled or the read failed for some other reason. Either way, the file is now useless and incomplete. Mark it as such.
+                    using (await _stateLock.EnterAsync())
+                    {
+                        _isFailed = true;
+
+                        // State changed - signal readers.
+                        _stateLock.PulseAll();
+
+                        FastFileMetrics.FailedUploads.Inc();
+                        throw;
+                    }
+                }
 
                 using var contentLockHolder = await _contentLock.WriterLockAsync();
                 using var stateLockHolder = await _stateLock.EnterAsync();
 
                 try
                 {
-                    if (!readResult.Buffer.IsEmpty)
+                    if (!result.Buffer.IsEmpty)
                     {
                         _content.Position = _content.Length;
 
-                        foreach (var segment in readResult.Buffer)
+                        foreach (var segment in result.Buffer)
                             _content.Write(segment.Span);
 
                         // More data is available - signal readers.
@@ -66,7 +85,7 @@ namespace FastFileExchange
                     }
 
                     // We need to set this after copying the last buffer, because IsCompleted can be set together with the last buffer.
-                    if (readResult.IsCompleted)
+                    if (result.IsCompleted)
                     {
                         _isCompleted = true;
 
@@ -79,7 +98,7 @@ namespace FastFileExchange
                 }
                 finally
                 {
-                    reader.AdvanceTo(readResult.Buffer.End);
+                    reader.AdvanceTo(result.Buffer.End);
                 }
             }
         }
@@ -112,6 +131,14 @@ namespace FastFileExchange
                 // Fill it with some data. We need only the content lock for read operations.
                 using (await _contentLock.ReaderLockAsync(cancel))
                 {
+                    // Check for failed upload as early as possible, so we do not waste time downloading
+                    // 90% of a file just to discover that the last 10% will never be available.
+                    if (_isFailed)
+                    {
+                        FastFileMetrics.FailedDownloads.Inc();
+                        throw new IncompleteFileException();
+                    }
+
                     if (firstIteration)
                     {
                         firstIteration = false;
@@ -162,6 +189,12 @@ namespace FastFileExchange
                         {
                             FastFileMetrics.CompletedDownloads.Inc();
                             return;
+                        }
+
+                        if (_isFailed)
+                        {
+                            FastFileMetrics.FailedDownloads.Inc();
+                            throw new IncompleteFileException();
                         }
 
                         // There is no more data but we are also not done. Take a sleep until something changes.

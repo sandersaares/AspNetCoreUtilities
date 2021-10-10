@@ -93,32 +93,48 @@ namespace Tests
         }
 
         [TestMethod]
-        public async Task IncompletePost_PublishesPartialFile()
+        public async Task IncompleteUpload_FailsUploadDownloadAndPreventsNewDownloads()
         {
             var handler = new FastFileExchangeHandler(FastFileExchangeHandlerOptions.Default, NullLogger.Instance);
 
             var original = RandomNumberGenerator.GetBytes(TestFileLength);
 
-            var expectedLength = 0;
+            Task<(TestHttpContext, byte[])>? firstDownload = null;
 
             try
             {
-                await UploadFileAsync(handler, original, statusReport =>
+                await UploadFileAsync(handler, original, async statusReport =>
                 {
-                    expectedLength = statusReport.UploadedBytes;
+                    if (firstDownload == null)
+                    {
+                        var downloadCaughtUp = new AsyncManualResetEvent();
+
+                        // Start the first download while the upload is happening. We expect this download to break with a connection abort.
+                        firstDownload = DownloadFileAsync(handler, x => { downloadCaughtUp.Set(); return Task.CompletedTask; });
+
+                        // Wait for the download to catch up and obtain the already-uploaded chunk.
+                        await downloadCaughtUp.WaitAsync();
+                    }
 
                     throw new ContractException("Throwing to abort upload in the middle.");
                 });
             }
-            catch (ContractException)
+            catch (EndOfStreamException)
             {
                 // Expected, just continue and try the download.
             }
 
-            var (downloadContext, downloadedFile) = await DownloadFileAsync(handler);
+            // We expect the first download to have been aborted.
+            // However, because we do not do real HTTP here, only fake pipes, there is no such thing as "connection abort" so we cannot detect it.
+            // Instead, we look for the "aborted" flag on the HTTP context.
+            Assert.IsNotNull(firstDownload);
+            var (downloadContext1, downloadedFile1) = await firstDownload;
+            Assert.IsTrue(downloadContext1.IsAborted);
 
-            Assert.AreEqual((int)HttpStatusCode.OK, downloadContext.Response.StatusCode);
-            Assert.AreEqual(expectedLength, downloadedFile.Length);
+            var (downloadContext2, downloadedFile2) = await DownloadFileAsync(handler);
+
+            // A failed upload simply registers as a 404 for new download requests.
+            Assert.AreEqual((int)HttpStatusCode.NotFound, downloadContext2.Response.StatusCode);
         }
 
         [TestMethod]
@@ -209,7 +225,10 @@ namespace Tests
                     var chunkLength = Math.Min(remaining, TestChunkLength);
 
                     var chunk = file.AsMemory(position, chunkLength);
-                    await requestBody.Writer.WriteAsync(chunk);
+                    var writeResult = await requestBody.Writer.WriteAsync(chunk);
+
+                    if (writeResult.IsCompleted || writeResult.IsCanceled)
+                        throw new EndOfStreamException("The reader stopped reading the upload stream.");
 
                     try
                     {
@@ -218,8 +237,12 @@ namespace Tests
                     }
                     catch (ContractException)
                     {
-                        // Just break out early, that's all we do.
-                        break;
+                        // Abort the request.
+                        context.RequestAbortedCts.Cancel();
+
+                        // There is a grace period involved so we actually have to wait a bit here to ensure that we do not get "admitted" within the grace period.
+                        await Task.Delay(FastFileExchangeHandler.CancelUploadGracePeriod);
+                        continue;
                     }
                 }
 
@@ -242,6 +265,10 @@ namespace Tests
 
             var responseBody = new Pipe();
 
+            var context = new TestHttpContext(requestBody.Reader, responseBody.Writer);
+            context.Request.Path = TestFilePath;
+            context.Request.Method = "GET";
+
             var readTask = Task.Run(async delegate
             {
                 var buffer = new MemoryStream();
@@ -250,6 +277,8 @@ namespace Tests
                 while (true)
                 {
                     var result = await reader.ReadAsync();
+
+                    ((TestHttpResponse)context.Response).HasStartedInternal = true;
 
                     foreach (var segment in result.Buffer)
                         buffer.Write(segment.Span);
@@ -267,10 +296,6 @@ namespace Tests
 
                 return buffer.ToArray();
             });
-
-            var context = new TestHttpContext(requestBody.Reader, responseBody.Writer);
-            context.Request.Path = TestFilePath;
-            context.Request.Method = "GET";
 
             await handler.HandleFileRequestAsync(context);
 
@@ -386,7 +411,10 @@ namespace Tests
 
             public override Stream Body { get => throw new NotImplementedException(); set => throw new NotImplementedException(); }
             public override IResponseCookies Cookies => throw new NotImplementedException();
-            public override bool HasStarted => throw new NotImplementedException();
+
+            public override bool HasStarted => HasStartedInternal;
+
+            public bool HasStartedInternal { get; set; }
 
             public override void OnCompleted(Func<object, Task> callback, object state)
             {

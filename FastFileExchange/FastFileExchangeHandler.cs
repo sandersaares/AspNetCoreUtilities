@@ -21,6 +21,12 @@ namespace FastFileExchange
 
         private static readonly string[] SupportedMethods = new[] { "GET", "POST", "DELETE" };
 
+        /// <summary>
+        /// When we get a "connection closed" notification, it is often the case that we have not yet finished processing an upload.
+        /// We give the upload a small bit of time to finish before we forcibly terminate it. This is how long it can take to finish.
+        /// </summary>
+        internal static readonly TimeSpan CancelUploadGracePeriod = TimeSpan.FromSeconds(2);
+
         public async Task HandleFileRequestAsync(HttpContext context)
         {
             if (!SupportedMethods.Contains(context.Request.Method))
@@ -86,12 +92,21 @@ namespace FastFileExchange
                 }
                 else
                 {
-                    // Not sure what happened but it is probably our fault - client can't mess up downloads very much.
-                    context.Response.StatusCode = (int)HttpStatusCode.InternalServerError;
+                    // Pretend that incomplete files do not even exist if we caught it early enough to return a 404.
+                    if (ex is IncompleteFileException)
+                    {
+                        context.Response.StatusCode = (int)HttpStatusCode.NotFound;
+                    }
+                    else
+                    {
+                        // Not sure what happened but it is probably our fault - client can't mess up downloads very much if the file exists and is complete.
+                        context.Response.StatusCode = (int)HttpStatusCode.InternalServerError;
+                    }
                 }
             }
             finally
             {
+                await context.Request.BodyReader.CompleteAsync();
                 await context.Response.BodyWriter.CompleteAsync();
             }
         }
@@ -107,7 +122,14 @@ namespace FastFileExchange
 
             try
             {
-                await file.CopyFromAsync(context.Request.BodyReader);
+                // Under normal operating conditions RequestAborted will be signaled BEFORE we are finished reading the request body.
+                // This is annoying but is how FFmpeg, for example, works - it closes the connection before even waiting for the response.
+                // Therefore, we have a grace period - once RequestAborted comes we give the FastFile a little bit of time to finish on its own
+                // before we really cancel it.
+                using var realCts = new CancellationTokenSource();
+                using var gracePeriodGivingRegistration = context.RequestAborted.Register(() => realCts.CancelAfter(CancelUploadGracePeriod));
+
+                await file.CopyFromAsync(context.Request.BodyReader, realCts.Token);
 
                 context.Response.StatusCode = (int)HttpStatusCode.Created;
                 _logger.LogInformation("Upload completed for {filePath}, length {length} bytes.", filePath, file.Length);
@@ -124,6 +146,7 @@ namespace FastFileExchange
             }
             finally
             {
+                await context.Request.BodyReader.CompleteAsync();
                 await context.Response.BodyWriter.CompleteAsync();
             }
         }
@@ -150,6 +173,7 @@ namespace FastFileExchange
             }
             finally
             {
+                await context.Request.BodyReader.CompleteAsync();
                 await context.Response.BodyWriter.CompleteAsync();
             }
         }

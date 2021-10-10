@@ -1,4 +1,6 @@
-﻿using System.Collections.Concurrent;
+﻿using Microsoft.AspNetCore.Http;
+using Microsoft.AspNetCore.Http.Extensions;
+using System.Collections.Concurrent;
 using System.Diagnostics.CodeAnalysis;
 using System.IO.Pipelines;
 using System.Text;
@@ -111,10 +113,8 @@ namespace FastFileExchange
             }
         }
 
-        public async Task WriteDiagnosticDumpAsync(PipeWriter writer, CancellationToken cancel)
+        public async Task WriteDiagnosticDumpAsync(HttpContext context)
         {
-            using var streamWriter = new StreamWriter(writer.AsStream(), Encoding.UTF8);
-
             var now = DateTimeOffset.UtcNow;
 
             // We just want an easy to read ordered list.
@@ -124,10 +124,15 @@ namespace FastFileExchange
             {
                 var timeToExpiration = item.Value.ExpiresAt - now;
 
-                await streamWriter.WriteLineAsync(FormattableString.Invariant($"'{item.Key}' [{item.Value.File.ContentType}]; length {item.Value.File.Length:N0}; accessed {item.Value.AccessCount:N0} times; expires in {timeToExpiration.TotalSeconds:F2} seconds."));
+                var link = new Uri(new Uri(UriHelper.GetEncodedUrl(context.Request).TrimEnd('/') + "/"), "../files" + item.Key);
+
+                var line = FormattableString.Invariant($"<a href='{link}'>{item.Key}</a> [{item.Value.File.ContentType}]; length {item.Value.File.Length:N0}; accessed {item.Value.AccessCount:N0} times; expires in {timeToExpiration.TotalSeconds:F2} seconds.");
+                
+                await context.Response.WriteAsync(line, context.RequestAborted);
+                await context.Response.WriteAsync(Environment.NewLine, context.RequestAborted);
             }
 
-            await streamWriter.WriteLineAsync(FormattableString.Invariant($"Total {_files.Count:N0} stored files."));
+            await context.Response.WriteAsync(FormattableString.Invariant($"Total {_files.Count:N0} stored files."), context.RequestAborted);
         }
     }
 }

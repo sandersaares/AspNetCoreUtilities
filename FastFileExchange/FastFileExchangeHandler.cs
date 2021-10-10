@@ -187,9 +187,9 @@ namespace FastFileExchange
             }
 
             context.Response.StatusCode = (int)HttpStatusCode.OK;
-            context.Response.ContentType = "text/plain";
+            context.Response.ContentType = "text/html";
 
-            await _repository.WriteDiagnosticDumpAsync(context.Response.BodyWriter, context.RequestAborted);
+            await _repository.WriteDiagnosticDumpAsync(context);
         }
     }
 }

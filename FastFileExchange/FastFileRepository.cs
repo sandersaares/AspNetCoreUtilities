@@ -126,7 +126,7 @@ namespace FastFileExchange
 
                 var link = new Uri(new Uri(UriHelper.GetEncodedUrl(context.Request).TrimEnd('/') + "/"), "../files" + item.Key);
 
-                var line = FormattableString.Invariant($"<a href='{link}'>{item.Key}</a> [{item.Value.File.ContentType}]; length {item.Value.File.Length:N0}; accessed {item.Value.AccessCount:N0} times; expires in {timeToExpiration.TotalSeconds:F2} seconds.");
+                var line = FormattableString.Invariant($"<a href='{link}'>{item.Key}</a> [{item.Value.File.ContentType}]; length {item.Value.File.Length:N0}; accessed {item.Value.AccessCount:N0} times; expires in {timeToExpiration.TotalSeconds:F2} seconds.<br/>");
                 
                 await context.Response.WriteAsync(line, context.RequestAborted);
                 await context.Response.WriteAsync(Environment.NewLine, context.RequestAborted);
